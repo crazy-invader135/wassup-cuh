@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Hello Neighbor Floor with Walls & Collision</title>
+<title>Wassup Neighbor</title>
 <style>
   body { margin: 0; overflow: hidden; }
   canvas { display: block; }
@@ -19,6 +19,7 @@
     font-family: Arial, sans-serif;
     font-size: 24px;
     cursor: pointer;
+    z-index: 10;
   }
 </style>
 </head>
@@ -71,18 +72,26 @@ function addWall(x,z,w,h,d){
   scene.add(wall);
   walls.push(wall);
 }
-// Surrounding walls
-addWall(0,-25,50,3,1); // back
-addWall(0,25,50,3,1);  // front
-addWall(-25,0,1,3,50); // left
-addWall(25,0,1,3,50);  // right
+addWall(0,-25,50,3,1);
+addWall(0,25,50,3,1);
+addWall(-25,0,1,3,50);
+addWall(25,0,1,3,50);
 
 // PointerLockControls
 const controls = new THREE.PointerLockControls(camera, renderer.domElement);
 const instructions = document.getElementById('instructions');
-instructions.addEventListener('click', () => { controls.lock(); });
-controls.addEventListener('lock', () => { instructions.style.display='none'; });
-controls.addEventListener('unlock', () => { instructions.style.display='flex'; });
+instructions.addEventListener('click', () => {
+    console.log("Click registered! Locking pointer...");
+    controls.lock();
+});
+controls.addEventListener('lock', () => { 
+    instructions.style.display='none'; 
+    console.log("Pointer locked!");
+});
+controls.addEventListener('unlock', () => { 
+    instructions.style.display='flex'; 
+    console.log("Pointer unlocked!");
+});
 scene.add(controls.getObject());
 
 // Movement
@@ -102,7 +111,7 @@ document.addEventListener('keyup', e=>{
 
 // Collision detection
 function checkCollision(pos){
-  const radius = 0.5; // player radius
+  const radius = 0.5;
   for(const wall of walls){
     const dx = Math.max(wall.position.x - wall.geometry.parameters.width/2, Math.min(pos.x, wall.position.x + wall.geometry.parameters.width/2));
     const dz = Math.max(wall.position.z - wall.geometry.parameters.depth/2, Math.min(pos.z, wall.position.z + wall.geometry.parameters.depth/2));
@@ -123,12 +132,10 @@ function animate(){
   if(move.left) direction.x -= playerSpeed;
   if(move.right) direction.x += playerSpeed;
 
-  // Proposed new position
   const newPos = controls.getObject().position.clone();
   newPos.x += direction.x;
   newPos.z += direction.z;
 
-  // Check collisions
   if(!checkCollision(newPos)){
     controls.moveRight(direction.x);
     controls.moveForward(direction.z);

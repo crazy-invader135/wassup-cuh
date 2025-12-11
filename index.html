@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>3D First Person</title>
+<title>Simple 3D First Person</title>
 <style>
   body { margin: 0; overflow: hidden; }
   canvas { display: block; }
@@ -10,48 +10,46 @@
 </head>
 <body>
 <script src="https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/controls/PointerLockControls.js"></script>
-<script type="module">
-
-import { PointerLockControls } from 'https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/controls/PointerLockControls.js';
-
-const scene = new THREE.Scene();
+<script src="https://cdn.jsdelivr.net/npm/three@0.162.0/examples/js/controls/PointerLockControls.js"></script>
+<script>
+let scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
 
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer();
+let camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+
+let renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// Pointer lock controls
-const controls = new PointerLockControls(camera, document.body);
+// PointerLockControls
+let controls = new THREE.PointerLockControls(camera, document.body);
 document.body.addEventListener('click', () => controls.lock());
 
 // Floor
-const floorGeometry = new THREE.PlaneGeometry(100, 100);
-const floorMaterial = new THREE.MeshPhongMaterial({color: 0x228B22});
-const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+let floorGeometry = new THREE.PlaneGeometry(100, 100);
+let floorMaterial = new THREE.MeshPhongMaterial({color: 0x228B22});
+let floor = new THREE.Mesh(floorGeometry, floorMaterial);
 floor.rotation.x = -Math.PI/2;
 scene.add(floor);
 
 // Lighting
-const light = new THREE.DirectionalLight(0xffffff, 1);
+let light = new THREE.DirectionalLight(0xffffff, 1);
 light.position.set(10, 20, 10);
 scene.add(light);
 scene.add(new THREE.AmbientLight(0x404040));
 
 // Cube
-const cubeGeometry = new THREE.BoxGeometry();
-const cubeMaterial = new THREE.MeshPhongMaterial({color: 0xff0000});
-const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+let cubeGeometry = new THREE.BoxGeometry();
+let cubeMaterial = new THREE.MeshPhongMaterial({color: 0xff0000});
+let cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
 cube.position.set(5, 0.5, -5);
 scene.add(cube);
 
 // Movement
-const velocity = new THREE.Vector3();
-const direction = new THREE.Vector3();
-const speed = 0.1;
-const keys = {};
+let velocity = new THREE.Vector3();
+let direction = new THREE.Vector3();
+let speed = 0.1;
+let keys = {};
 document.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
 document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
@@ -62,7 +60,7 @@ window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// Animation
+// Animation loop
 function animate() {
     requestAnimationFrame(animate);
 
@@ -82,7 +80,6 @@ function animate() {
     renderer.render(scene, camera);
 }
 animate();
-
 </script>
 </body>
 </html>

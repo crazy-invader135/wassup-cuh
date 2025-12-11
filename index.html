@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Hello Neighbor — Lite (HTML + Three.js)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    html,body { height:100%; margin:0; background:#222; font-family:system-ui,Segoe UI,Roboto,Arial; color:#eee; }
+    #ui { position: absolute; top:8px; left:8px; z-index:10; background:rgba(0,0,0,0.4); padding:8px 10px; border-radius:6px; }
+    #status { font-weight:700; color:#ffd580; }
+    #instructions { font-size:13px; color:#ccc; margin-top:6px; }
+    canvas { display:block; } 
+    #minimap { position:absolute; right:8px; top:8px; width:150px; height:150px; background:rgba(0,0,0,0.35); border-radius:6px; padding:6px; }
+    #minimap canvas { width:100%; height:100%; display:block; }
+    #hint { position: absolute; bottom:8px; left:8px; z-index:10; background:rgba(0,0,0,0.25); padding:6px 8px; border-radius:6px; font-size:13px; color:#ddd; }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <div>Hello Neighbor — Lite</div>
+    <div id="status">Status: <span id="statetext">Hidden</span></div>
+    <div id="instructions">Click screen to enable mouse. WASD move, mouse to look. Space=sprint, C=crouch</div>
+  </div>
+  <div id="minimap"><canvas id="mm" width="300" height="300"></canvas></div>
+  <div id="hint">Tip: hide behind crates or crouch to reduce detection.</div>
+
+  <!-- three.js modules from unpkg (modern browsers only) -->
+  <script type="module">
+  import * as THREE from 'https://unpkg.com/three@0.152.2/build/three.module.js';
+  import { PointerLockControls } from 'https://unpkg.com/three@0.152.2/examples/jsm/controls/PointerLockControls.js';
+
+  // ----- Scene setup -----
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x88aacc);
+
+  const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+
+  const renderer = new THREE.WebGLRenderer({antialias:true});
+  renderer.setSize(innerWidth, innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  // Lighting
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x444466, 0.8);
+  hemi.position.set(0, 50, 0);
+  scene.add(hemi);
+
+  const dir = new THREE.DirectionalLight(0xffefd5, 0.6);
+  dir.position.set(-5, 10, -5);
+  scene.add(dir);
+
+  // Floor
+  const floorGeo = new THREE.PlaneGeometry(40, 40);
+  const floorMat = new THREE.MeshStandardMaterial({color:0x707070});
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.rotation.x = -Math.PI/2;
+  scene.add(floor);
+
+  // Walls / simple "room"
+  const wallMat = new THREE.MeshStandardMaterial({color:0x8b6d5c});
+  const makeWall = (w,h,d,x,y,z,rotY=0) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), wallMat);
+    m.position.set(x,y,z);
+    m.rotation.y = rotY;
+    m.receiveShadow = true;
+    scene.add(m);
+    collidables.push(m);
+    return m;
+  };
+  // room perimeter (open ceiling)
+  const collidables = [];
+  makeWall(0.5, 6, 40, -20.25, 3, 0); // left
+  makeWall(0.5, 6, 40, 20.25, 3, 0);  // right
+  makeWall(40, 6, 0.5, 0, 3, -20.25); // back
+  makeWall(40, 6, 0.5, 0, 3, 20.25);  // front
+
+  // Add some furniture / crates to hide behind
+  const crateMat = new THREE.MeshStandardMaterial({color:0x5a5a5a});
+  function addCrate(x,z,s=2) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(s,s,s), crateMat);
+    m.position.set(x, s/2, z);
+    scene.add(m);
+    collidables.push(m);
+    return m;
+  }
+  const crates = [
+    addCrate(-6, -2, 2.5),
+    addCrate(4, 3, 3),
+    addCrate(8, -6, 2.2),
+    addCrate(-10, 8, 2.8),
+  ];
+
+  // Player setup (camera is player view)
+  const controls = new PointerLockControls(camera, renderer.domElement);
+  camera.position.set(0, 1.7, 8); // start back in room
+
+  // UI elements
+  const statetext = document.getElementById('statetext');
+
+  // Unlock / lock pointer
+  renderer.domElement.addEventListener('click', () => {
+    controls.lock();
+  });
+
+  // Movement state
+  const move = { forward:false, back:false, left:false, right:false };
+  let velocity = new THREE.Vector3();
+  let canJump = false;
+  let isCrouch = false;
+  let sprint = false;
+
+  const onKeyDown = (e) => {
+    if (e.code === 'KeyW') move.forward = true;
+    if (e.code === 'KeyS') move.back = true;
+    if (e.code === 'KeyA') move.left = true;
+    if (e.code === 'KeyD') move.right = true;
+    if (e.code === 'Space') sprint = true;
+    if (e.code === 'KeyC') { isCrouch = true; camera.position.y = 1.0; }
+  };
+  const onKeyUp = (e) => {
+    if (e.code === 'KeyW') move.forward = false;
+    if (e.code === 'KeyS') move.back = false;
+    if (e.code === 'KeyA') move.left = false;
+    if (e.code === 'KeyD') move.right = false;
+    if (e.code === 'Space') sprint = false;
+    if (e.code === 'KeyC') { isCrouch = false; camera.position.y = 1.7; }
+  };
+  document.addEventListener('keydown', onKeyDown);
+  document.addEventListener('keyup', onKeyUp);
+
+  // Simple collision test: use bounding boxes for collidables
+  function checkCollisions(newPos) {
+    // create box for player (approx capsule)
+    const playerBox = new THREE.Box3().setFromCenterAndSize(
+      new THREE.Vector3(newPos.x, newPos.y - 0.85, newPos.z),
+      new THREE.Vector3(0.6, 1.7, 0.6)
+    );
+    for (const c of collidables) {
+      const box = new THREE.Box3().setFromObject(c);
+      if (playerBox.intersectsBox(box)) return true;
+    }
+    return false;
+  }
+
+  // NPC (the neighbor)
+  const npc = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.9, 1.2), new THREE.MeshStandardMaterial({color:0xff6666}));
+  npc.position.set(0, 0.95, -10);
+  scene.add(npc);
+
+  // NPC state machine
+  let npcState = 'patrol'; // patrol, suspicious, chase, search
+  let lastSeenPosition = null;
+  let searchTimer = 0;
+
+  // Patrol path (array of Vector3)
+  const patrolPoints = [
+    new THREE.Vector3(-8, 0, -10),
+    new THREE.Vector3(8, 0, -10),
+    new THREE.Vector3(8, 0, 8),
+    new THREE.Vector3(-8, 0, 8)
+  ];
+  let patrolIndex = 0;
+
+  // NPC detection parameters
+  const NPC = {
+    fovDeg: 50,        // field of view half-angle deg
+    viewDistance: 12,
+    sightCheckInterval: 0.12,
+    walkSpeed: 1.8,
+    chaseSpeed: 4.0,
+    suspiciousTime: 2.0
+  };
+
+  // raycaster for NPC sight
+  const raycaster = new THREE.Raycaster();
+
+  // Helper: can NPC see player?
+  function npcCanSeePlayer() {
+    const npcEye = new THREE.Vector3().copy(npc.position).add(new THREE.Vector3(0, 1.3, 0));
+    const playerPos = new THREE.Vector3().copy(camera.position);
+    const toPlayer = new THREE.Vector3().subVectors(playerPos, npcEye);
+    const dist = toPlayer.length();
+    if (dist > NPC.viewDistance) return false;
+
+    // angle check
+    const forward = new THREE.Vector3(0,0,-1).applyQuaternion(npc.quaternion);
+    const angle = forward.angleTo(toPlayer.clone().normalize());
+    if (angle > THREE.MathUtils.degToRad(NPC.fovDeg)) return false;
+
+    // line-of-sight: raycast and see if hits obstacle before player
+    raycaster.set(npcEye, toPlayer.normalize());
+    raycaster.far = dist;
+    const intersects = raycaster.intersectObjects(collidables.concat([])); // objects that block sight
+    if (intersects.length > 0) {
+      // blocked by something
+      return false;
+    }
+
+    // crouch reduces chance: if player crouched, treat as partially hidden (50% chance)
+    if (isCrouch) {
+      if (Math.random() < 0.5) return false;
+    }
+
+    return true;
+  }
+
+  // Create a small visual cone for NPC (debug)
+  const coneGeom = new THREE.ConeGeometry(0.6, 4, 6, 1, true);
+  const coneMat = new THREE.MeshBasicMaterial({color:0xffff00, transparent:true, opacity:0.08, side:THREE.DoubleSide});
+  const fovCone = new THREE.Mesh(coneGeom, coneMat);
+  fovCone.rotation.x = Math.PI/2;
+  scene.add(fovCone);
+
+  // timing
+  let prevTime = performance.now();
+  let sightTimer = 0;
+
+  // Minimap drawing (2D)
+  const mmCanvas = document.getElementById('mm');
+  const mmCtx = mmCanvas.getContext('2d');
+  function drawMinimap() {
+    mmCtx.clearRect(0,0,mmCanvas.width,mmCanvas.height);
+    // world coords -> minimap coords
+    const scale = 4; // pixels per unit
+    const cx = mmCanvas.width/2, cy = mmCanvas.height/2;
+
+    // draw floor boundary
+    mmCtx.fillStyle = '#283036';
+    mmCtx.fillRect(0,0,mmCanvas.width,mmCanvas.height);
+    mmCtx.strokeStyle = '#fff';
+    mmCtx.strokeRect(10,10,mmCanvas.width-20, mmCanvas.height-20);
+
+    // draw crates
+    mmCtx.fillStyle = '#aaaaaa';
+    for (const c of crates) {
+      const x = cx + c.position.x*scale;
+      const y = cy - c.position.z*scale;
+      mmCtx.fillRect(x-4, y-4, 8, 8);
+    }
+
+    // draw NPC
+    mmCtx.fillStyle = '#ff6666';
+    const nx = cx + npc.position.x*scale;
+    const ny = cy - npc.position.z*scale;
+    mmCtx.beginPath();
+    mmCtx.arc(nx, ny, 6, 0, Math.PI*2);
+    mmCtx.fill();
+
+    // draw player
+    mmCtx.fillStyle = '#66ff66';
+    const px = cx + camera.position.x*scale;
+    const py = cy - camera.position.z*scale;
+    mmCtx.beginPath();
+    mmCtx.arc(px, py, 5, 0, Math.PI*2);
+    mmCtx.fill();
+  }
+
+  // Main animate loop
+  function animate() {
+    requestAnimationFrame(animate);
+    const time = performance.now();
+    const dt = (time - prevTime) / 1000;
+    prevTime = time;
+
+    // Movement
+    const speedBase = 2.2;
+    const speed = (sprint ? 1.6 : 1.0) * (isCrouch ? 0.5 : 1.0) * speedBase;
+    const direction = new THREE.Vector3();
+    const forwardVec = new THREE.Vector3();
+    controls.getDirection(forwardVec); // unit vector of camera forward
+    forwardVec.y = 0;
+    forwardVec.normalize();
+    const rightVec = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0), forwardVec).normalize();
+
+    if (move.forward) direction.add(forwardVec);
+    if (move.back) direction.sub(forwardVec);
+    if (move.left) direction.sub(rightVec);
+    if (move.right) direction.add(rightVec);
+    if (direction.length() > 0) direction.normalize();
+
+    const proposed = camera.position.clone().add(direction.multiplyScalar(speed * dt));
+    if (!checkCollisions(proposed)) {
+      camera.position.copy(proposed);
+    } // else blocked
+
+    // NPC behavior
+    sightTimer -= dt;
+    if (sightTimer < 0) {
+      sightTimer = NPC.sightCheckInterval;
+      const seen = npcCanSeePlayer();
+      if (seen) {
+        npcState = 'chase';
+        lastSeenPosition = camera.position.clone();
+        searchTimer = 0;
+      } else {
+        if (npcState === 'chase') {
+          // lost sight
+          npcState = 'search';
+          searchTimer = 4.0;
+        }
+      }
+    }
+
+    // State actions
+    if (npcState === 'patrol') {
+      // move to patrol point
+      const target = patrolPoints[patrolIndex];
+      const dest = new THREE.Vector3(target.x, npc.position.y, target.z);
+      const toDest = dest.clone().sub(npc.position);
+      const dist = toDest.length();
+      if (dist < 0.3) {
+        patrolIndex = (patrolIndex + 1) % patrolPoints.length;
+      } else {
+        const movev = toDest.normalize().multiplyScalar(NPC.walkSpeed * dt);
+        npc.position.add(movev);
+        npc.lookAt(dest);
+      }
+    } else if (npcState === 'chase') {
+      // chase player
+      const dest = new THREE.Vector3(camera.position.x, npc.position.y, camera.position.z);
+      const toDest = dest.clone().sub(npc.position);
+      const dist = toDest.length();
+      if (dist > 0.5) {
+        const movev = toDest.normalize().multiplyScalar(NPC.chaseSpeed * dt);
+        npc.position.add(movev);
+        npc.lookAt(dest);
+      }
+      // if catches player (close)
+      if (dist < 1.2) {
+        // caught: reset player to start
+        camera.position.set(0, 1.7, 8);
+        npcState = 'patrol';
+        patrolIndex = 0;
+      }
+      lastSeenPosition = camera.position.clone();
+    } else if (npcState === 'search') {
+      // walk to last seen position, look around for a bit
+      if (lastSeenPosition) {
+        const dest = new THREE.Vector3(lastSeenPosition.x, npc.position.y, lastSeenPosition.z);
+        const toDest = dest.clone().sub(npc.position);
+        if (toDest.length() > 0.6) {
+          const movev = toDest.normalize().multiplyScalar(NPC.walkSpeed * dt);
+          npc.position.add(movev);
+          npc.lookAt(dest);
+        } else {
+          // at last seen spot: look around and decrement timer
+          searchTimer -= dt;
+          npc.rotation.y += Math.sin(time*0.002)*0.01;
+          if (searchTimer <= 0) {
+            npcState = 'patrol';
+            lastSeenPosition = null;
+          }
+        }
+      } else {
+        npcState = 'patrol';
+      }
+    }
+
+    // Update visual FOV cone
+    fovCone.position.set(npc.position.x, npc.position.y + 1.0, npc.position.z);
+    const lookDir = new THREE.Vector3(0,0,-1).applyQuaternion(npc.quaternion);
+    const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,-1), lookDir);
+    fovCone.quaternion.copy(quaternion);
+
+    // Update HUD status
+    // Check if visible right now (for player feedback)
+    const visibleNow = npcCanSeePlayer();
+    statetext.textContent = visibleNow ? 'Spotted!' : (isCrouch ? 'Crouched/Hidden' : 'Hidden');
+
+    // draw minimap
+    drawMinimap();
+
+    renderer.render(scene, camera);
+  }
+
+  // Place camera inside pointerlock only when locked; otherwise orbit a bit
+  controls.addEventListener('lock', () => { /* locked */ });
+  controls.addEventListener('unlock', () => { /* unlocked */ });
+
+  // Resize handling
+  window.addEventListener('resize', () => {
+    camera.aspect = innerWidth/innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  // initial render start
+  animate();
+
+  // Optional: small debug helpers (toggle in code)
+  // console.log('Scene ready — click screen then use WASD and mouse to play.');
+  </script>
+</body>
+</html>

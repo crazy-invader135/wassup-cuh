@@ -3,14 +3,30 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Hello Neighbor Floor</title>
+<title>Hello Neighbor Floor with PointerLock</title>
 <style>
   body { margin: 0; overflow: hidden; }
   canvas { display: block; }
+  #instructions {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.8);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: Arial, sans-serif;
+    font-size: 24px;
+    cursor: pointer;
+  }
 </style>
 </head>
 <body>
+<div id="instructions">Click to play</div>
+
 <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/controls/PointerLockControls.js"></script>
 
 <script>
 let scene = new THREE.Scene();
@@ -27,43 +43,67 @@ document.body.appendChild(renderer.domElement);
 const ambient = new THREE.AmbientLight(0xffffff, 0.6);
 scene.add(ambient);
 
-// Load floor texture from repo
+// Floor texture
 const loader = new THREE.TextureLoader();
 const floorTexture = loader.load('Textures/Grass.png'); // GitHub path
 floorTexture.wrapS = THREE.RepeatWrapping;
 floorTexture.wrapT = THREE.RepeatWrapping;
 floorTexture.repeat.set(10,10);
 
-// Floor
 const floorGeo = new THREE.PlaneGeometry(50,50);
 const floorMat = new THREE.MeshStandardMaterial({ map: floorTexture });
 const floor = new THREE.Mesh(floorGeo, floorMat);
 floor.rotation.x = -Math.PI/2;
 scene.add(floor);
 
-// Player movement
-const keys = {};
-document.addEventListener('keydown', e => keys[e.key] = true);
-document.addEventListener('keyup', e => keys[e.key] = false);
+// PointerLockControls
+const controls = new THREE.PointerLockControls(camera, renderer.domElement);
+const instructions = document.getElementById('instructions');
+instructions.addEventListener('click', () => {
+    controls.lock();
+});
+controls.addEventListener('lock', () => { instructions.style.display = 'none'; });
+controls.addEventListener('unlock', () => { instructions.style.display = 'flex'; });
+scene.add(controls.getObject());
+
+// Movement
+const move = { forward: false, backward: false, left: false, right: false };
+document.addEventListener('keydown', e => {
+    if(e.code === 'KeyW') move.forward = true;
+    if(e.code === 'KeyS') move.backward = true;
+    if(e.code === 'KeyA') move.left = true;
+    if(e.code === 'KeyD') move.right = true;
+});
+document.addEventListener('keyup', e => {
+    if(e.code === 'KeyW') move.forward = false;
+    if(e.code === 'KeyS') move.backward = false;
+    if(e.code === 'KeyA') move.left = false;
+    if(e.code === 'KeyD') move.right = false;
+});
 
 // Animate
-function animate(){
-  requestAnimationFrame(animate);
+const playerSpeed = 0.1;
+function animate() {
+    requestAnimationFrame(animate);
 
-  if(keys['w']) camera.position.z -= 0.1;
-  if(keys['s']) camera.position.z += 0.1;
-  if(keys['a']) camera.position.x -= 0.1;
-  if(keys['d']) camera.position.x += 0.1;
+    const direction = new THREE.Vector3();
+    if(move.forward) direction.z -= playerSpeed;
+    if(move.backward) direction.z += playerSpeed;
+    if(move.left) direction.x -= playerSpeed;
+    if(move.right) direction.x += playerSpeed;
 
-  renderer.render(scene, camera);
+    controls.moveRight(direction.x);
+    controls.moveForward(direction.z);
+
+    renderer.render(scene, camera);
 }
 animate();
 
-// Resize
+// Handle resize
 window.addEventListener('resize', ()=>{
-  camera.aspect = window.innerWidth/window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
 });
 </script>
 </body>

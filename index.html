@@ -5,11 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Basic 3D FPS Environment</title>
     <style>
-        body { margin: 0; overflow: hidden; } /* Remove margins and scrollbars */
+        body { margin: 0; overflow: hidden; } 
         canvas { display: block; }
+        /* --- NEW CSS FOR CROSSHAIR --- */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 8px;
+            height: 8px;
+            margin-top: -4px; /* Half of height to center vertically */
+            margin-left: -4px; /* Half of width to center horizontally */
+            border: 2px solid white; /* Simple white square */
+            border-radius: 4px; /* Makes it a dot/circle */
+            box-shadow: 0 0 1px #000;
+            pointer-events: none; /* Crucial: allows clicks to pass through to the canvas */
+            z-index: 100;
+        }
+        /* ------------------------------ */
     </style>
 </head>
 <body>
+    <div id="crosshair"></div>
     <script type="module" src="game.js"></script>
 </body>
 </html>

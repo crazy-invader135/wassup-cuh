@@ -1,139 +1,112 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
 <head>
-<meta charset="utf-8">
-<title>Hello Neighbor Lite – GitHub Pages Version</title>
-<style>
-  html,body { margin:0; height:100%; overflow:hidden; }
-  #info {
-    position:absolute; top:10px; left:10px;
-    color:white; background:rgba(0,0,0,0.4);
-    padding:8px 12px; border-radius:6px;
-    font-family:sans-serif;
-  }
-</style>
-
-<!-- THREE.JS CDN (NON-MODULE, WORKS ON GITHUB PAGES) -->
-<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/controls/PointerLockControls.js"></script>
-
+    <meta charset="utf-8">
+    <title>Hello Neighbor Style Game</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            height: 100%;
+            background: #000;
+        }
+        #instructions {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 20px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            font-family: Arial;
+            text-align: center;
+            cursor: pointer;
+        }
+    </style>
 </head>
 <body>
-<div id="info">Click to lock mouse • WASD move • Mouse look</div>
+
+<div id="instructions">Click to start<br>W A S D = Move<br>Mouse = Look</div>
+
+<!-- Load Three.js (global, no modules) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<!-- Pointer Lock Controls (global version) -->
+<script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/controls/PointerLockControls.js"></script>
 
 <script>
-// SCENE
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87cefa);
+    // Scene setup
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-// CAMERA
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-camera.position.set(0, 1.7, 5);
+    const renderer = new THREE.WebGLRenderer();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
 
-// RENDERER
-const renderer = new THREE.WebGLRenderer({ antialias:true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
+    // Light
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(5, 10, 7);
+    scene.add(light);
 
-// LIGHT
-const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
-scene.add(light);
+    // Ground
+    const groundGeo = new THREE.PlaneGeometry(100, 100);
+    const groundMat = new THREE.MeshPhongMaterial({color: 0x888888});
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    scene.add(ground);
 
-// FLOOR
-const floor = new THREE.Mesh(
-  new THREE.PlaneGeometry(40,40),
-  new THREE.MeshStandardMaterial({color:0x777777})
-);
-floor.rotation.x = -Math.PI/2;
-scene.add(floor);
+    // A test house wall (Hello Neighbor style)
+    const wallGeo = new THREE.BoxGeometry(10, 5, 1);
+    const wallMat = new THREE.MeshPhongMaterial({color: 0xaa5533});
+    const wall = new THREE.Mesh(wallGeo, wallMat);
+    wall.position.set(0, 2.5, -10);
+    scene.add(wall);
 
-// WALLS
-function wall(w,h,d,x,y,z){
-  const m = new THREE.Mesh(
-    new THREE.BoxGeometry(w,h,d),
-    new THREE.MeshStandardMaterial({color:0x8b6d5c})
-  );
-  m.position.set(x,y,z);
-  scene.add(m);
-}
-wall(40,5,1,0,2.5,-20);
-wall(40,5,1,0,2.5,20);
-wall(1,5,40,-20,2.5,0);
-wall(1,5,40,20,2.5,0);
+    // Pointer lock setup
+    const controls = new THREE.PointerLockControls(camera, document.body);
 
-// NPC (Neighbor)
-const npc = new THREE.Mesh(
-  new THREE.BoxGeometry(1,2,1),
-  new THREE.MeshStandardMaterial({color:0xff4444})
-);
-npc.position.set(0,1,0);
-scene.add(npc);
+    const instructions = document.getElementById('instructions');
+    instructions.addEventListener('click', () => {
+        controls.lock();
+    });
 
-// CONTROLS
-const controls = new THREE.PointerLockControls(camera, document.body);
-document.body.addEventListener("click", ()=>controls.lock());
+    controls.addEventListener('lock', () => {
+        instructions.style.display = 'none';
+    });
 
-let move = {w:0,a:0,s:0,d:0};
-document.addEventListener("keydown",e=>{
-  if(e.code==="KeyW") move.w=1;
-  if(e.code==="KeyS") move.s=1;
-  if(e.code==="KeyA") move.a=1;
-  if(e.code==="KeyD") move.d=1;
-});
-document.addEventListener("keyup",e=>{
-  if(e.code==="KeyW") move.w=0;
-  if(e.code==="KeyS") move.s=0;
-  if(e.code==="KeyA") move.a=0;
-  if(e.code==="KeyD") move.d=0;
-});
+    controls.addEventListener('unlock', () => {
+        instructions.style.display = '';
+    });
 
-// MOVEMENT
-function updateMovement(dt){
-  const speed = 4;
-  const forward = new THREE.Vector3();
-  camera.getWorldDirection(forward);
-  forward.y = 0;
-  forward.normalize();
+    // Basic movement
+    const keys = { w: false, a: false, s: false, d: false };
 
-  const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0,1,0));
+    document.addEventListener('keydown', (e) => {
+        if (keys[e.key] !== undefined) keys[e.key] = true;
+    });
 
-  const moveVec = new THREE.Vector3();
-  if(move.w) moveVec.add(forward);
-  if(move.s) moveVec.sub(forward);
-  if(move.a) moveVec.add(right);
-  if(move.d) moveVec.sub(right);
+    document.addEventListener('keyup', (e) => {
+        if (keys[e.key] !== undefined) keys[e.key] = false;
+    });
 
-  camera.position.add(moveVec.multiplyScalar(speed * dt));
-}
+    function animate() {
+        requestAnimationFrame(animate);
 
-// NPC patrol
-let t = 0;
-function updateNPC(dt){
-  t += dt;
-  npc.position.x = Math.sin(t) * 8;
-  npc.position.z = Math.cos(t) * 8;
-  npc.lookAt(camera.position);
-}
+        const speed = 0.1;
 
-// LOOP
-let last = performance.now();
-function animate(){
-  requestAnimationFrame(animate);
-  let now = performance.now();
-  let dt = (now-last)/1000;
-  last = now;
+        if (controls.isLocked) {
+            if (keys.w) controls.moveForward(speed);
+            if (keys.s) controls.moveForward(-speed);
+            if (keys.a) controls.moveRight(-speed);
+            if (keys.d) controls.moveRight(speed);
+        }
 
-  updateMovement(dt);
-  updateNPC(dt);
-  renderer.render(scene, camera);
-}
-animate();
+        renderer.render(scene, camera);
+    }
 
-window.addEventListener("resize",()=>{
-  camera.aspect = window.innerWidth/window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
+    animate();
 </script>
+
 </body>
 </html>

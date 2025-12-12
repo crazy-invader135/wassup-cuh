@@ -2,15 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Grass World – Perfect Wall Collision (No Sticking)</title>
+<title>Grass World with Wall + Better Collision</title>
 <style>
   body { margin:0; overflow:hidden; }
-  #info { position:absolute; top:20px; left:20px; color:#fff; background:#0008;
-          padding:12px; border-radius:8px; font-family:Arial; pointer-events:none; }
+  #instructions {
+    position: absolute; top: 20px; left: 20px; color: white; background: #0008;
+    padding: 15px; border-radius: 10px; font-family: Arial; pointer-events: none;
+  }
 </style>
 </head>
 <body>
-<div id="info">Click to play · WASD move · Mouse look · ESC pause</div>
+
+<div id="instructions">Click to start · WASD to move · Mouse to look · ESC to pause</div>
 
 <script type="importmap">
 {
@@ -38,15 +41,17 @@ document.body.appendChild(renderer.domElement);
 const controls = new PointerLockControls(camera, document.body);
 scene.add(controls.getObject());
 
+// Click to lock pointer
 document.body.addEventListener('click', () => controls.lock());
 
+// Lights
 scene.add(new THREE.AmbientLight(0xffffff, 0.7));
 const sun = new THREE.DirectionalLight(0xffffff, 1);
 sun.position.set(100, 200, 100);
 sun.castShadow = true;
 scene.add(sun);
 
-// Grass
+// Grass floor
 const tex = new THREE.TextureLoader().load('Textures/Grass.png');
 tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
 tex.repeat.set(800, 800);
@@ -56,126 +61,107 @@ const ground = new THREE.Mesh(
   new THREE.PlaneGeometry(20000, 20000),
   new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 })
 );
-ground.rotation.x = -Math.PI/2;
+ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// Wall (big gray block in front of you)
-const wall = new THREE.Mesh(
-  new THREE.BoxGeometry(40, 20, 4),
-  new THREE.MeshStandardMaterial({ color: 0x777777 })
-);
-wall.position.set(0, 10, -40);
+// === WALL ===
+const wallGeometry = new THREE.BoxGeometry(40, 20, 2);
+const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x888888 });
+const wall = new THREE.Mesh(wallGeometry, wallMaterial);
+wall.position.set(0, 10, -30); // in front of spawn
 wall.castShadow = true;
 wall.receiveShadow = true;
 scene.add(wall);
 
-// Collision box for the wall
+// Collision box for wall
 const wallBox = new THREE.Box3().setFromObject(wall);
+wallBox.expandByScalar(0.5); // margin
 
-// Player capsule (more accurate than a box)
-const playerRadius = 2;
-const playerHeight = 8;
-let playerPos = controls.getObject().position.clone();
-
+// Player eye height
 camera.position.y = 10;
 
+// Movement
+const move = { forward: false, backward: false, left: false, right: false };
 const velocity = new THREE.Vector3();
 const direction = new THREE.Vector3();
-let move = { forward: false, backward: false, left: false, right: false };
 let prevTime = performance.now();
 
 document.addEventListener('keydown', e => {
-  if (e.code === 'KeyW') move.forward = true;
-  if (e.code === 'KeyS') move.backward = true;
-  if (e.code === 'KeyA') move.left = true;
-  if (e.code === 'KeyD') move.right = true;
+  switch (e.code) {
+    case 'KeyW': move.forward  = true; break;
+    case 'KeyS': move.backward = true; break;
+    case 'KeyA': move.left     = true; break;
+    case 'KeyD': move.right    = true; break;
+  }
 });
 document.addEventListener('keyup', e => {
-  if (e.code === 'KeyW') move.forward = false;
-  if (e.code === 'KeyS') move.backward = false;
-  if (e.code === 'KeyA') move.left = false;
-  if (e.code === 'KeyD') move.right = false;
+  switch (e.code) {
+    case 'KeyW': move.forward  = false; break;
+    case 'KeyS': move.backward = false; break;
+    case 'KeyA': move.left     = false; break;
+    case 'KeyD': move.right    = false; break;
+  }
 });
 
+// Animation loop with better collision (separate X/Z moves for sliding)
 function animate() {
   requestAnimationFrame(animate);
 
-  if (!controls.isLocked) {
-    renderer.render(scene, camera);
-    return;
-  }
+  if (controls.isLocked) {
+    const time = performance.now();
+    const delta = (time - prevTime) / 1000;
 
-  const delta = (performance.now() - prevTime) / 1000;
+    velocity.x -= velocity.x * 10.0 * delta;
+    velocity.z -= velocity.z * 10.0 * delta;
 
-  // Reset velocity
-  velocity.x -= velocity.x * 10 * delta;
-  velocity.z -= velocity.z * 10 * delta;
+    direction.z = Number(move.forward) - Number(move.backward);
+    direction.x = Number(move.right) - Number(move.left);
+    direction.normalize();
 
-  // Direction from input
-  direction.set(
-    Number(move.right) - Number(move.left),
-    0,
-    Number(move.forward) - Number(move.backward)
-  ).normalize();
+    if (move.forward || move.backward) velocity.z -= direction.z * 400.0 * delta;
+    if (move.left || move.right) velocity.x -= direction.x * 400.0 * delta;
 
-  // Acceleration
-  const speed = 400;
-  velocity.x += direction.x * speed * delta;
-  velocity.z += direction.z * speed * delta;
+    // Calculate potential moves
+    const moveX = -velocity.x * delta;
+    const moveZ = -velocity.z * delta;
 
-  // Proposed movement this frame
-  const moveDelta = new THREE.Vector3(-velocity.x * delta, 0, -velocity.z * delta);
-
-  // Temporary new position
-  const newPos = playerPos.clone().add(moveDelta);
-
-  // Create player capsule for this frame
-  const playerBox = new THREE.Box3(
-    new THREE.Vector3(newPos.x - playerRadius, newPos.y, newPos.z - playerRadius),
-    new THREE.Vector3(newPos.x + playerRadius, newPos.y + playerHeight, newPos.z + playerRadius)
-  );
-
-  // If we would intersect the wall → only allow the part that doesn't intersect
-  if (playerBox.intersectsBox(wallBox)) {
-    // Try X movement only
-    const testX = playerPos.clone();
-    testX.x += moveDelta.x;
-    const boxX = new THREE.Box3(
-      new THREE.Vector3(testX.x - playerRadius, testX.y, testX.z - playerRadius),
-      new THREE.Vector3(testX.x + playerRadius, testX.y + playerHeight, testX.z + playerRadius)
+    // Player bounding box
+    const playerBox = new THREE.Box3().setFromCenterAndSize(
+      controls.getObject().position.clone(),
+      new THREE.Vector3(2, 2, 2) // player size
     );
-    if (!boxX.intersectsBox(wallBox)) {
-      controls.moveRight(moveDelta.x);
-      playerPos.x = testX.x;
+
+    // Check X movement separately
+    let canMoveX = true;
+    const newBoxX = playerBox.clone().translate(new THREE.Vector3(moveX, 0, 0));
+    if (newBoxX.intersectsBox(wallBox)) {
+      canMoveX = false;
+      velocity.x = 0; // stop velocity in X if blocked
     }
 
-    // Try Z movement only
-    const testZ = playerPos.clone();
-    testZ.z += moveDelta.z;
-    const boxZ = new THREE.Box3(
-      new THREE.Vector3(testZ.x - playerRadius, testZ.y, testZ.z - playerRadius),
-      new THREE.Vector3(testZ.x + playerRadius, testZ.y + playerHeight, testZ.z + playerRadius)
-    );
-    if (!boxZ.intersectsBox(wallBox)) {
-      controls.moveForward(moveDelta.z);
-      playerPos.z = testZ.z;
+    // Check Z movement separately
+    let canMoveZ = true;
+    const newBoxZ = playerBox.clone().translate(new THREE.Vector3(0, 0, moveZ));
+    if (newBoxZ.intersectsBox(wallBox)) {
+      canMoveZ = false;
+      velocity.z = 0; // stop velocity in Z if blocked
     }
-  } else {
-    // No collision → move normally
-    controls.moveRight(moveDelta.x);
-    controls.moveForward(moveDelta.z);
-    playerPos.add(moveDelta);
-  }
 
-  // Keep eye height
-  controls.getObject().position.y = 10;
-  prevTime = performance.now();
+    // Apply allowed movements
+    if (canMoveX) controls.moveRight(moveX);
+    if (canMoveZ) controls.moveForward(moveZ);
+
+    controls.getObject().position.y = 10;
+
+    prevTime = time;
+  }
 
   renderer.render(scene, camera);
 }
 animate();
 
+// Resize
 window.addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();

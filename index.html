@@ -2,18 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Working NPC – Auto Start</title>
+<title>Working NPC – Fixed & Auto-Start</title>
 <style>
-  body { margin:0; overflow:hidden; background:#000; }
+  body { margin:0; overflow:hidden; }
   #info {
-    position:absolute; top:10px; left:10px; color:white; font-family:Arial; z-index:100;
-    background:rgba(0,0,0,0.5); padding:10px; border-radius:8px;
+    position:absolute; top:10px; left:10px; color:#fff; background:rgba(0,0,0,0.6);
+    padding:10px; border-radius:8px; font-family:Arial; z-index:100;
   }
 </style>
 </head>
 <body>
 
-<div id="info">Loading NPC... (auto-start in ½ second)</div>
+<div id="info">Loading NPC… (auto-start in 0.5 sec)</div>
 
 <script type="importmap">
 {
@@ -31,11 +31,11 @@ import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
 import JSZip from 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
 
-const scene   = new THREE.Scene();
+const scene    = new THREE.Scene();
 scene.background = new THREE.Color(0x88ccff);
 scene.fog = new THREE.Fog(0x88ccff, 50, 1000);
 
-const camera  = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 2000);
+const camera   = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 2000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
@@ -43,21 +43,24 @@ document.body.appendChild(renderer.domElement);
 
 const controls = new PointerLockControls(camera, renderer.domElement);
 
-// Auto-start immediately (no click needed ever)
+// Auto-start (no click needed)
 setTimeout(() => controls.lock(), 500);
+
+scene.add(controls.getObject());
+camera.position.y = 10;
 
 // Lights
 scene.add(new THREE.AmbientLight(0xffffff, 0.7));
 const sun = new THREE.DirectionalLight(0xffffff, 1);
 sun.position.set(100,200,100);
 sun.castShadow = true;
-sun.shadow.mapSize.width = sun.shadow.mapSize.height = 2048;
+sun.shadow.mapSize.set(2048,2048);
 scene.add(sun);
 
 // Grass floor
 const grassTex = new THREE.TextureLoader().load('Textures/Grass.png');
 grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
-grassTex.repeat.set(400,400);
+grassTex.repeat.set(500,500);
 grassTex.encoding = THREE.sRGBEncoding;
 
 const ground = new THREE.Mesh(
@@ -68,51 +71,47 @@ ground.rotation.x = -Math.PI/2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// Player height
-camera.position.y = 10;
+// Movement
+const keys = {w:false,a:false,s:false,d:false};
+addEventListener('keydown', e => { if('wasdWASD'.includes(e.key)) keys[e.key.toLowerCase()]=true; });
+addEventListener('keyup',   e => { if('wasdWASD'.includes(e.key)) keys[e.key.toLowerCase()]=false; });
 
-// Simple movement
-const keys = {w:false, a:false, s:false, d:false};
-addEventListener('keydown', e => { if('WASD'.includes(e.key.toUpperCase())) keys[e.key.toLowerCase()]=true; });
-addEventListener('keyup',   e => { if('WASD'.includes(e.key.toUpperCase())) keys[e.key.toLowerCase()]=false; });
-
-const vel = new THREE.Vector3();
-const dir = new THREE.Vector3();
+const velocity = new THREE.Vector3();
+const direction = new THREE.Vector3();
 let prevTime = performance.now();
 
-// LOAD THE NESTED ZIP NPC
+// LOAD NESTED ZIP NPC
 async function loadNPC() {
   try {
     const resp = await fetch('Models/NPC.zip');
-    if (!resp.ok) throw "NPC.zip not found or CORS blocked";
-    const zipData = await resp.arrayBuffer();
-    const outer = await JSZip.loadAsync(zipData);
+    if (!resp.ok) throw 'Cannot fetch NPC.zip – check the path';
+    const outerZip = await JSZip.loadAsync(await resp.arrayBuffer());
 
-    // find model.zip inside
+    // find model.zip inside outer zip
     let innerZipData = null;
-    outer.forEach((path, file) => {
+    outerZip.forEach((path, file) => {
       if (path.toLowerCase().includes('model.zip')) innerZipData = file.async('arraybuffer');
     });
-    if (!innerZipData) throw "model.zip not found inside NPC.zip";
+    if (!innerZipData) throw 'model.zip not found inside NPC.zip';
 
-    const inner = await JSZip.loadAsync(await innerZipData);
+    const innerZip = await JSZip.loadAsync(await innerZipData);
 
-    // create blob URLs for every file in BOTH zips
+    // create blob URLs for all files
     const urls = {};
-    const add = async (zip, base='') => {
+    const addFiles = async (zip, prefix='') => {
       for (const [name, file] of Object.entries(zip.files)) {
         if (file.dir) continue;
-        urls[base+name] = URL.createObjectURL(await file.async('blob'));
+        urls[prefix + name] = URL.createObjectURL(await file.async('blob'));
       }
     };
-    await add(outer);
-    await add(inner, 'inner/');
+    await addFiles(outerZip);
+    await addFiles(innerZip, 'inner/');
 
-    // find .obj and optional .mtl
+    // find .obj and .mtl
     const objEntry = Object.entries(urls).find(([k]) => k.toLowerCase().endsWith('.obj'));
     const mtlEntry = Object.entries(urls).find(([k]) => k.toLowerCase().endsWith('.mtl'));
 
-    if (!objEntry) throw "No .obj file found";
+    if (!objEntry) throw 'No .obj file found';
 
     const manager = new THREE.LoadingManager();
     manager.setURLModifier(url => {
@@ -122,54 +121,56 @@ async function loadNPC() {
 
     const loader = new OBJLoader(manager);
     if (mtlEntry) {
-      const mtl = await new MTLLoader(manager).loadAsync(mtlEntry[1]);
-      mtl.preload();
-      loader.setMaterials(mtl);
+      const materials = await new MTLLoader(manager).loadAsync(mtlEntry[1]);
+      materials.preload();
+      loader.setMaterials(materials);
     }
 
-    const object = await loader.loadAsync(objEntry[1]);
+    const model = await loader.loadAsync(objEntry[1]);
 
-    object.scale.set(3,3,3);           // adjust if too small/big
-    object.position.set(0, 0, -40);     // 40 meters in front of spawn
-    object.rotation.y = Math.PI;        // face player
+    model.scale.set(3,3,3);           // change if needed
+    model.position.set(0, 0, -40);    // 40 meters in front
+    model.rotation.y = Math.PI;       // face player
 
-    object.traverse(n => {
-      if (n.isMesh) {
-        n.castShadow = true;
-        n.receiveShadow = true;
+    model.traverse(node => {
+      if (node.isMesh) {
+        node.castShadow = true;
+        node.receiveShadow = true;
       }
     });
 
-    scene.add(object);
-    document.getElementById('info').textContent = "NPC loaded – walk forward!";
-    console.log("NPC spawned successfully");
+    scene.add(model);
+    document.getElementById('info').textContent = 'NPC loaded – walk forward!';
+    console.log('NPC spawned!');
 
-  } catch (e) {
-    document.getElementById('info').textContent = "ERROR: " + e;
-    console.error(e);
+  } catch (err) {
+    document.getElementById('info').textContent = 'ERROR: ' + err;
+    console.error(err);
   }
 }
 
-load(); // start loading
+loadNPC();
 
 // Animation loop
 function animate() {
   requestAnimationFrame(animate);
 
   if (controls.isLocked) {
-    const delta = (performance.now() - prevTime)/1000;
-    vel.x -= vel.x * 10 * delta;
-    vel.z -= vel.z *  *10 * delta;
+    const delta = (performance.now() - prevTime) / 1000;
 
-    dir.z = (keys.w?1:0) - (keys.s?1:0);
-    dir.x = (keys.d?1:0) - (keys.a?1:0);
-    dir.normalize();
+    velocity.x -= velocity.x * 10 * delta;
+    velocity.z -= velocity.z * 10 * delta;   // ←←← FIXED LINE
 
-    if (keys.w || keys.s) vel.z -= dir.z * 400 * delta;
-    if (keys.a || keys.d) vel.x -= dir.x * 400 * delta;
+    direction.z = (keys.w?1:0) - (keys.s?1:0);
+    direction.x = (keys.d?1:0) - (keys.a?1:0);
+    direction.normalize();
 
-    controls.moveRight(-vel.x * delta);
-    controls.moveForward(-vel.z * delta);
+    if (keys.w || keys.s) velocity.z -= direction.z * 400 * delta;
+    if (keys.a || keys.d) velocity.x -= direction.x * 400 * delta;
+
+    controls.moveRight(-velocity.x * delta);
+    controls.moveForward(-velocity.z * delta);
+
     camera.position.y = 10;
     prevTime = performance.now();
   }
@@ -178,7 +179,6 @@ function animate() {
 }
 animate();
 
-// Resize
 addEventListener('resize', () => {
   camera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix();

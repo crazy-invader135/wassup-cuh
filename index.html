@@ -1,145 +1,181 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<title>Grass World – Perfect Collision (Actually Works)</title>
-<style>
-  body { margin:0; overflow:hidden; }
-  #info { position:absolute; top:20px; left:20px; color:#fff; background:#0009; padding:15px; border-radius:10px; font-family:Arial; pointer-events:none; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hello Neighbor - Grass Edition</title>
+    <style>
+        body { margin:0; overflow:hidden; background:#000; font-family:Arial; }
+        canvas { display:block; }
+        #instructions, #gameOver {
+            position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+            background:rgba(0,0,0,0.85); color:white; padding:30px; border-radius:12px;
+            text-align:center; z-index:100; max-width:420px;
+        }
+        #instructions.hidden { display:none; }
+        #gameOver { color:red; display:none; font-size:1.8em; }
+    </style>
 </head>
 <body>
-<div id="info">Click once → WASD to move. Try the wall!</div>
+    <div id="instructions">
+        <h1>Sneak In!</h1>
+        <p><strong>Click → WASD + Mouse</strong><br>Sneak past the red neighbor!</p>
+    </div>
+    <div id="gameOver">
+        <h1>CAUGHT!</h1>
+        <p>Refresh to try again</p>
+    </div>
 
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/"
-  }
-}
-</script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.Fog(0x228B22, 20, 100);
 
-<script type="module">
-import * as THREE from 'three';
-import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+        const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({antialias:true});
+        renderer.setSize(innerWidth, innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x88ccff);
-scene.fog = new THREE.Fog(0x88ccff, 100, 1500);
+        // === FIXED + BEAUTIFUL LIGHTING ===
+        scene.add(new THREE.AmbientLight(0x666666, 1.4));
+        const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+        sun.position.set(20, 40, 20);
+        sun.castShadow = true;
+        sun.shadow.mapSize.width = sun.shadow.mapSize.height = 2048;
+        scene.add(sun);
+        scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.2));
 
-const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 2000);
-const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true;
-document.body.appendChild(renderer.domElement);
+        // === GRASS FLOOR WITH TEXTURE ===
+        const textureLoader = new THREE.TextureLoader();
+        const grassTexture = textureLoader.load('Textures/Grass.png');
+        grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping;
+        grassTexture.repeat.set(30, 30); // makes it look nice and dense
 
-const controls = new PointerLockControls(camera, document.body);
-scene.add(controls.getObject());
+        const ground = new THREE.Mesh(
+            new THREE.PlaneGeometry(200, 200),
+            new THREE.MeshLambertMaterial({ map: grassTexture })
+        );
+        ground.rotation.x = -Math.PI/2;
+        ground.receiveShadow = true;
+        scene.add(ground);
 
-document.body.addEventListener('click', () => controls.lock(), {once:true});
+        // House (same as before)
+        const wallMat = new THREE.MeshLambertMaterial({color:0xcd853f});
+        const roofMat = new THREE.MeshLambertMaterial({color:0x8b4513});
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-const sun = new THREE.DirectionalLight(0xffffff, 1);
-sun.position.set(100,200,100);
-sun.castShadow = true;
-scene.add(sun);
+        const box = (w,h,d,x,y,z) => {
+            const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), wallMat);
+            m.position.set(x,y,z); m.castShadow = m.receiveShadow = true;
+            scene.add(m); return m;
+        };
+        box(8.5,10,1, -5.75,5,-20);  // left front
+        box(8.5,10,1,  5.75,5,-20);  // right front
+        box(20,10,1, 0,5,20);        // back
+        box(1,10,42,-10,5,0);        // left wall
+        box(1,10,42, 10,5,0);        // right wall
 
-// Grass
-const tex = new THREE.TextureLoader().load('Textures/Grass.png');
-tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-tex.repeat.set(1000,1000);
-tex.encoding = THREE.sRGBEncoding;
+        const roof = new THREE.Mesh(new THREE.BoxGeometry(22,2,44), roofMat);
+        roof.position.set(0,11,0);
+        roof.castShadow = roof.receiveShadow = true;
+        scene.add(roof);
 
-const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(100000,100000),
-  new THREE.MeshStandardMaterial({map:tex, roughness:0.9})
-);
-ground.rotation.x = -Math.PI/2;
-ground.receiveShadow = true;
-scene.add(ground);
+        // Neighbor
+        const neighbor = new THREE.Mesh(
+            new THREE.BoxGeometry(1.8,3.5,1.8),
+            new THREE.MeshLambertMaterial({color:0xff0000})
+        );
+        neighbor.position.set(0,1.75,5);
+        neighbor.castShadow = true;
+        scene.add(neighbor);
 
-// WALL
-const wall = new THREE.Mesh(
-  new THREE.BoxGeometry(60, 30, 6),
-  new THREE.MeshStandardMaterial({color:0x777777})
-);
-wall.position.set(0, 15, -50);
-wall.castShadow = true;
-wall.receiveShadow = true;
-scene.add(wall);
+        const patrolPoints = [
+            new THREE.Vector3(0,1.75,5),
+            new THREE.Vector3(6,1.75,12),
+            new THREE.Vector3(-6,1.75,12),
+            new THREE.Vector3(0,1.75,5)
+        ];
+        let idx = 0;
 
-const wallBox = new THREE.Box3().setFromObject(wall);
+        camera.position.set(0,1.8,-30);
 
-// Player
-camera.position.y = 10;
-const PLAYER_RADIUS = 3;
+        // Controls (same as your working version)
+        let yaw = 0, pitch = 0;
+        const keys = {};
+        addEventListener('keydown', e => keys[e.code] = true);
+        addEventListener('keyup',   e => keys[e.code] = false);
+        addEventListener('click', () => renderer.domElement.requestPointerLock());
+        addEventListener('mousemove', e => {
+            if (document.pointerLockElement) {
+                yaw   -= e.movementX * 0.002;
+                pitch -= e.movementY * 0.002;
+                pitch = Math.max(-1.57, Math.min(1.57, pitch));
+            }
+        });
 
-// Input
-const move = {forward:false, backward:false, left:false, right:false};
+        // Simple collision
+        const walls = scene.children.filter(o => o instanceof THREE.Mesh && o !== ground && o !== neighbor);
+        function collides(pos) {
+            const box = new THREE.Box3().setFromCenterAndSize(pos, new THREE.Vector3(0.8,2.4,0.8));
+            return walls.some(w => box.intersectsBox(new THREE.Box3().setFromObject(w)));
+        }
 
-document.addEventListener('keydown', e => {
-  if(e.code==='KeyW') move.forward  = true;
-  if(e.code==='KeyS') move.backward = true;
-  if(e.code==='KeyA') move.left     = true;
-  if(e.code==='KeyD') move.right    = true;
-});
-document.addEventListener('keyup', e => {
-  if(e.code==='KeyW') move.forward  = false;
-  if(e.code==='KeyS') move.backward = false;
-  if(e.code==='KeyA') move.left     = false;
-  if(e.code==='KeyD') move.right    = false;
-});
+        let gameOver = false;
+        const instructions = document.getElementById('instructions');
+        const gameOverDiv  = document.getElementById('gameOver');
 
-function animate() {
-  requestAnimationFrame(animate);
+        function animate() {
+            requestAnimationFrame(animate);
 
-  if (!controls.isLocked) {
-    renderer.render(scene, camera);
-    return;
-  }
+            camera.rotation.set(pitch, yaw, 0);
 
-  const speed = 150; // units per second
-  const delta = 0.016; // ~60fps
+            if (!gameOver) {
+                const speed = 0.15;
+                const move = new THREE.Vector3(
+                    (keys['KeyD']?-speed:0) + (keys['KeyA']?speed:0),
+                    0,
+                    (keys['KeyW']?-speed:0) + (keys['KeyS']?speed:0)
+                );
+                if (move.lengthSq()) {
+                    move.applyQuaternion(camera.quaternion);
+                    const np = camera.position.clone().add(move);
+                    if (!collides(np)) camera.position.copy(np);
+                }
 
-  // Reset movement
-  let dx = 0, dz = 0;
+                // neighbor patrol
+                const target = patrolPoints[idx];
+                const dir = target.clone().sub(neighbor.position).normalize();
+                neighbor.position.add(dir.multiplyScalar(0.025));
+                neighbor.lookAt(target);
+                if (neighbor.position.distanceTo(target) < 0.5) idx = (idx+1)%4;
 
-  if (move.forward)  dz -= speed * delta;
-  if (move.backward) dz += speed * delta;
-  if (move.right)    dx += speed * delta;
-  if (move.left)     dx -= speed * delta;
+                // detection
+                if (camera.position.distanceTo(neighbor.position) < 12) {
+                    const toPlayer = camera.position.clone().sub(neighbor.position).normalize();
+                    neighbor.getWorldDirection(dir);
+                    if (toPlayer.dot(dir.negate()) > 0.6) {
+                        gameOver = true;
+                        gameOverDiv.style.display = 'block';
+                    }
+                }
 
-  const pos = controls.getObject().position;
+                // win
+                if (camera.position.z > 18) {
+                    alert('YOU WIN! You sneaked in!');
+                    gameOver = true;
+                }
+            }
 
-  // Test X movement
-  const testBoxX = new THREE.Box3(
-    new THREE.Vector3(pos.x + dx - PLAYER_RADIUS, pos.y, pos.z - PLAYER_RADIUS),
-    new THREE.Vector3(pos.x + dx + PLAYER_RADIUS, pos.y + 6, pos.z + PLAYER_RADIUS)
-  );
-  if (!testBoxX.intersectsBox(wallBox)) {
-    controls.moveRight(dx);
-  }
+            renderer.render(scene, camera);
+        }
 
-  // Test Z movement (using updated X position)
-  const testBoxZ = new THREE.Box3(
-    new THREE.Vector3(pos.x - PLAYER_RADIUS, pos.y, pos.z + dz - PLAYER_RADIUS),
-    new THREE.Vector3(pos.x + PLAYER_RADIUS, pos.y + 6, pos.z + dz + PLAYER_RADIUS)
-  );
-  if (!testBoxZ.intersectsBox(wallBox)) {
-    controls.moveForward(dz);
-  }
+        animate();
 
-  pos.y = 10;
-  renderer.render(scene, camera);
-}
-animate();
-
-window.addEventListener('resize', () => {
-  camera.aspect = innerWidth/innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-});
-</script>
+        addEventListener('resize', () => {
+            camera.aspect = innerWidth/innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(innerWidth, innerHeight);
+        });
+    </script>
 </body>
 </html>

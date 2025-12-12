@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Simple Grass World – Walking Fixed</title>
+<title>Grass World with Wall + Collision</title>
 <style>
   body { margin:0; overflow:hidden; }
   #instructions {
@@ -41,7 +41,7 @@ document.body.appendChild(renderer.domElement);
 const controls = new PointerLockControls(camera, document.body);
 scene.add(controls.getObject());
 
-// Click to activate pointer lock
+// Click to lock pointer
 document.body.addEventListener('click', () => controls.lock());
 
 // Lights
@@ -65,16 +65,28 @@ ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// Player eye height
+// === WALL (simple box) ===
+const wallGeometry = new THREE.BoxGeometry(40, 20, 2);
+const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x888888 });
+const wall = new THREE.Mesh(wallGeometry, wallMaterial);
+wall.position.set(0, 10, -30); // 30 units in front of spawn
+wall.castShadow = true;
+wall.receiveShadow = true;
+scene.add(wall);
+
+// Simple collision box (slightly larger than the visual wall so you stop before touching it)
+const wallBox = new THREE.Box3().setFromObject(wall);
+wallBox.expandByScalar(0.5); // a little extra margin
+
+// Player starts at eye height
 camera.position.y = 10;
 
-// Movement state
+// Movement
 const move = { forward: false, backward: false, left: false, right: false };
 const velocity = new THREE.Vector3();
 const direction = new THREE.Vector3();
 let prevTime = performance.now();
 
-// Keyboard input
 document.addEventListener('keydown', e => {
   switch (e.code) {
     case 'KeyW': move.forward  = true; break;
@@ -92,19 +104,19 @@ document.addEventListener('keyup', e => {
   }
 });
 
-// Animation loop — FIXED ORDER
+// Animation loop
 function animate() {
   requestAnimationFrame(animate);
 
   if (controls.isLocked) {
     const time = performance.now();
-    const delta = (time - prevTime) / 1000; // correct delta
+    const delta = (time - prevTime) / 1000;
 
     // Dampen velocity
     velocity.x -= velocity.x * 10.0 * delta;
     velocity.z -= velocity.z * 10.0 * delta;
 
-    // Input direction
+    // Calculate movement direction
     direction.z = Number(move.forward) - Number(move.backward);
     direction.x = Number(move.right) - Number(move.left);
     direction.normalize();
@@ -113,21 +125,35 @@ function animate() {
     if (move.forward || move.backward) velocity.z -= direction.z * 400.0 * delta;
     if (move.left || move.right) velocity.x -= direction.x * 400.0 * delta;
 
-    // Move the player
-    controls.moveRight(-velocity.x * delta);
-    controls.moveForward(-velocity.z * delta);
+    // Calculate new position
+    const moveX = -velocity.x * delta;
+    const moveZ = -velocity.z * delta;
 
-    // Keep player at ground level + eye height
+    // Test if new position would collide with the wall
+    const playerBox = new THREE.Box3().setFromCenterAndSize(
+      controls.getObject().position,
+      new THREE.Vector3(2, 2, 2) // player size
+    );
+
+    playerBox.translate(new THREE.Vector3(moveX, 0, moveZ));
+
+    if (!playerBox.intersectsBox(wallBox)) {
+      // No collision → allow movement
+      controls.moveRight(moveX);
+      controls.moveForward(moveZ);
+    }
+
+    // Keep player at eye height
     controls.getObject().position.y = 10;
 
-    prevTime = time; // update prevTime at the end
+    prevTime = time;
   }
 
   renderer.render(scene, camera);
 }
 animate();
 
-// Resize handler
+// Resize
 window.addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Working NPC – Fixed JSZip Import</title>
+<title>Working NPC – JSZip Fixed</title>
 <style>
   body { margin:0; overflow:hidden; }
   #info {
@@ -19,8 +19,7 @@
 {
   "imports": {
     "three": "https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/",
-    "jszip": "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/"
   }
 }
 </script>
@@ -30,8 +29,7 @@ import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
-// Fixed import: JSZip uses named export, not default
-import { JSZip } from 'jszip';
+import { JSZip } from 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';  // ← FIXED: named import { JSZip }
 
 const scene    = new THREE.Scene();
 scene.background = new THREE.Color(0x88ccff);
@@ -86,10 +84,10 @@ let prevTime = performance.now();
 async function loadNPC() {
   try {
     const resp = await fetch('Models/NPC.zip');
-    if (!resp.ok) throw 'Cannot fetch NPC.zip – check path or filename';
+    if (!resp.ok) throw 'Cannot fetch NPC.zip – check the path';
     const outerZip = await JSZip.loadAsync(await resp.arrayBuffer());
 
-    // Find model.zip inside the outer zip
+    // find model.zip inside outer zip
     let innerZipData = null;
     outerZip.forEach((path, file) => {
       if (path.toLowerCase().includes('model.zip')) innerZipData = file.async('arraybuffer');
@@ -98,7 +96,7 @@ async function loadNPC() {
 
     const innerZip = await JSZip.loadAsync(await innerZipData);
 
-    // Create blob URLs for every file in both zips
+    // create blob URLs for all files
     const urls = {};
     const addFiles = async (zip, prefix='') => {
       for (const [name, file] of Object.entries(zip.files)) {
@@ -109,7 +107,7 @@ async function loadNPC() {
     await addFiles(outerZip);
     await addFiles(innerZip, 'inner/');
 
-    // Find .obj and optional .mtl
+    // find .obj and .mtl
     const objEntry = Object.entries(urls).find(([k]) => k.toLowerCase().endsWith('.obj'));
     const mtlEntry = Object.entries(urls).find(([k]) => k.toLowerCase().endsWith('.mtl'));
 
@@ -130,9 +128,9 @@ async function loadNPC() {
 
     const model = await loader.loadAsync(objEntry[1]);
 
-    model.scale.set(3,3,3);           // adjust if your model is too small/big
-    model.position.set(0, 0, -40);    // 40 meters in front of spawn
-    model.rotation.y = Math.PI;       // face the player
+    model.scale.set(3,3,3);           // change if needed
+    model.position.set(0, 0, -40);    // 40 meters in front
+    model.rotation.y = Math.PI;       // face player
 
     model.traverse(node => {
       if (node.isMesh) {
@@ -142,8 +140,8 @@ async function loadNPC() {
     });
 
     scene.add(model);
-    document.getElementById('info').textContent = 'NPC loaded – walk forward to see it!';
-    console.log('NPC spawned successfully');
+    document.getElementById('info').textContent = 'NPC loaded – walk forward!';
+    console.log('NPC spawned!');
 
   } catch (err) {
     document.getElementById('info').textContent = 'ERROR: ' + err;

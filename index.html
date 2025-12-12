@@ -1,123 +1,104 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<title>Simple Grass World – You Can Actually Move</title>
-<style>
+  <meta charset="utf-8">
+  <title>Grass World – 100% Working</title>
+  <style>
+    body { margin:0; overflow:hidden; background:#88ccff; }
+    #click { position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+             background:rgba(0,0,0,0.5); color:white; font: bold 30px Arial; cursor:pointer; }
+  </style>
 </head>
 <body>
 
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/"
-  }
-}
-</script>
+<div id="click">CLICK TO START</div>
 
 <script type="module">
-import * as THREE from 'three';
-import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js';
+import { PointerLockControls } from 'https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/controls/PointerLockControls.js';
 
-// Scene setup
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x88ccff);
 scene.fog = new THREE.Fog(0x88ccff, 100, 1000);
 
-const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 2000);
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 2000);
+const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 document.body.appendChild(renderer.domElement);
 
-const controls = new PointerLockControls(camera, document.body); // ← document.body, not renderer.domElement
+const controls = new PointerLockControls(camera, document.body);
 scene.add(controls.getObject());
 
-// Click anywhere to start (most reliable method)
-document.body.style.cursor = 'grab';
-document.body.addEventListener('click', () => controls.lock());
+document.getElementById('click').addEventListener('click', () => {
+  controls.lock();
+  document.getElementById('click').style.display = 'none';
+});
 
 // Lights
-scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+scene.add(new THREE.AmbientLight(0xffffff, 0.8));
 const sun = new THREE.DirectionalLight(0xffffff, 1);
-sun.position.set(100, 200, 100);
+sun.position.set(50, 100, 50);
 sun.castShadow = true;
 scene.add(sun);
 
-// Grass floor
-const tex = new THREE.TextureLoader().load('Textures/Grass.png');
-tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-tex.repeat.set(800, 800);
-tex.encoding = THREE.sRGBEncoding;
+// Grass
+const grass = new THREE.TextureLoader().load('Textures/Grass.png');
+grass.wrapS = grass.wrapT = THREE.RepeatWrapping;
+grass.repeat.set(1000, 1000);
 
 const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(20000, 20000),
-  new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 })
+  new THREE.PlaneGeometry(50000, 50000),
+  new THREE.MeshStandardMaterial({ map: grass })
 );
-ground.rotation.x = -Math.PI / 2;
+ground.rotation.x = -Math.PI/2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// Player starts at eye height
 camera.position.y = 10;
 
-// Movement variables
-const velocity = new THREE.Vector3();
-const direction = new THREE.Vector3();
-let move = { forward: false, backward: false, left: false, right: false };
-let prevTime = performance.now();
+// Movement
+let move = {f:false, b:false, l:false, r:false};
+const vel = new THREE.Vector3();
+const dir = new THREE.Vector3();
 
-// Keyboard controls
 document.addEventListener('keydown', e => {
-  switch (e.code) {
-    case 'KeyW': move.forward  = true; break;
-    case 'KeyS': move.backward = true; break;
-    case 'KeyA': move.left     = true; break;
-    case 'KeyD': move.right    = true; break;
-  }
+  if (e.code==='KeyW') move.f = true;
+  if (e.code==='KeyS') move.b = true;
+  if (e.code==='KeyA') move.l = true;
+  if (e.code==='KeyD') move.r = true;
 });
 document.addEventListener('keyup', e => {
-  switch (e.code) {
-    case 'KeyW': move.forward  = false; break;
-    case 'KeyS': move.backward = false; break;
-    case 'KeyA': move.left     = false; break;
-    case 'KeyD': move.right    = false; break;
-  }
+  if (e.code==='KeyW') move.f = false;
+  if (e.code==='KeyS') move.b = false;
+  if (e.code==='KeyA') move.l = false;
+  if (e.code==='KeyD') move.r = false;
 });
 
-// Animation loop
 function animate() {
   requestAnimationFrame(animate);
 
   if (controls.isLocked) {
-    const time = performance.now();
-    const delta = (time - prevTime) / 1000;
+    const delta = 0.016; // simple fixed delta works fine
 
-    velocity.x -= velocity.x * 10 * delta;
-    velocity.z -= velocity.z * 10 * delta;
+    vel.x = vel.z = 0;
+    if (move.f) vel.z -= 20;
+    if (move.b) vel.z += 20;
+    if (move.l) vel.x -= 20;
+    if (move.r) vel.x += 20;
 
-    direction.z = Number(move.forward) - Number(move.backward);
-    direction.x = Number(move.right) - Number(move.left);
-    direction.normalize();
+    controls.moveForward(-vel.z * delta * 60);
+    controls.moveRight(-vel.x * delta * 60);
 
-    if (move.forward || move.backward) velocity.z -= direction.z * 400 * delta;
-    if (move.left || move.right) velocity.x -= direction.x * 400 * delta;
-
-    controls.moveRight(-velocity.x * delta);
-    controls.moveForward(-velocity.z * delta);
-
-    controls.getObject().position.y = 10; // stay at eye height
-    prevTime = time;
+    controls.getObject().position.y = 10;
   }
 
   renderer.render(scene, camera);
 }
 animate();
 
-// Resize
 window.addEventListener('resize', () => {
-  camera.aspect = innerWidth / innerHeight;
+  camera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
 });

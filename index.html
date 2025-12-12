@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Working NPC – FINAL FIXED VERSION</title>
+<title>NPC Works – Final Fixed</title>
 <style>
   body { margin:0; overflow:hidden; }
   #info {
@@ -28,7 +28,7 @@ import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
-import JSZip from 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.js'; // ← THIS LINE FIXED
+import JSZip from 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.js'; // works!
 
 const scene    = new THREE.Scene();
 scene.background = new THREE.Color(0x88ccff);
@@ -68,20 +68,21 @@ ground.rotation.x = -Math.PI/2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// Movement
+// Simple movement
 const keys = {w:false,a:false,s:false,d:false};
-addEventListener('keydown', e => { if('wasdWASD'.includes(e.key)) keys[e.key.toLowerCase()]=true; });
-addEventListener('keyup',   e => { if('wasdWASD'.includes(e.key)) keys[e.key.toLowerCase()]=false; });
+addEventListener('keydown', e=>{if('wasdWASD'.includes(e.key))keys[e.key.toLowerCase()]=true;});
+addEventListener('keyup',   e=>{if('wasdWASD'.includes(e.key))keys[e.key.toLowerCase()]=false;});
 
 const velocity = new THREE.Vector3();
 const direction = new THREE.Vector3();
 let prevTime = performance.now();
 
-// LOAD NPC
+// LOAD NPC FROM NESTED ZIP
 async function loadNPC() {
   try {
     const resp = await fetch('Models/NPC.zip');
-    if (!resp.ok) throw 'NPC.zip not found or blocked';
+    if (!resp.ok) throw 'NPC.zip not found';
+
     const outerZip = await JSZip.loadAsync(await resp.arrayBuffer());
 
     let innerZipData = null;
@@ -110,7 +111,7 @@ async function loadNPC() {
     const manager = new THREE.LoadingManager();
     manager.setURLModifier(url => {
       try { return urls[new URL(url).pathname.replace(/^\/+/,'')] || url; }
-      catch { return urls[url] || url;
+      catch { return urls[url] || url; }
     });
 
     const loader = new OBJLoader(manager);
@@ -122,28 +123,30 @@ async function loadNPC() {
 
     const model = await loader.loadAsync(objEntry[1]);
 
-    model.scale.set(3,3,3);
-    model.position.set(0,0,-40);
-    model.rotation.y = Math.PI;
+    model.scale.set(4,4,4);           // adjust if your model is tiny/huge
+    model.position.set(0,0,-40);      // 40 m in front of you
+    model.rotation.y = Math.PI;       // face the player
 
     model.traverse(n => {
       if (n.isMesh) n.castShadow = n.receiveShadow = true;
     });
 
     scene.add(model);
-    document.getElementById('info').textContent = 'NPC loaded – walk forward!';
+    document.getElementById('info').textContent = 'NPC loaded – walk toward it!';
+    console.log('NPC spawned successfully');
   } catch (e) {
-    document.getElementById('info').textContent = 'ERROR: ' + e;
+    document.getElementById('info').textContent = 'ERROR: '+e;
     console.error(e);
   }
 }
 loadNPC();
 
-// Animate
+// Animation loop
 function animate() {
   requestAnimationFrame(animate);
   if (controls.isLocked) {
     const delta = (performance.now() - prevTime)/1000;
+
     velocity.x -= velocity.x * 10 * delta;
     velocity.z -= velocity.z * 10 * delta;
 
@@ -156,6 +159,7 @@ function animate() {
 
     controls.moveRight(-velocity.x * delta);
     controls.moveForward(-velocity.z * delta);
+
     camera.position.y = 10;
     prevTime = performance.now();
   }
@@ -163,6 +167,7 @@ function animate() {
 }
 animate();
 
+// Resize
 addEventListener('resize', () => {
   camera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix();

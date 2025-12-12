@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Grass World – Perfect Collision (No Sticking)</title>
+<title>Grass World – Perfect Collision (Actually Works)</title>
 <style>
   body { margin:0; overflow:hidden; }
   #info { position:absolute; top:20px; left:20px; color:#fff; background:#0009; padding:15px; border-radius:10px; font-family:Arial; pointer-events:none; }
 </style>
 </head>
 <body>
-<div id="info">Click → WASD to move. Try walking into the wall!</div>
+<div id="info">Click once → WASD to move. Try the wall!</div>
 
 <script type="importmap">
 {
@@ -69,30 +69,26 @@ wall.castShadow = true;
 wall.receiveShadow = true;
 scene.add(wall);
 
-// Collision walls list (you can add more later)
-const walls = [];
-walls.push(new THREE.Box3().setFromObject(wall));
+const wallBox = new THREE.Box3().setFromObject(wall);
 
-// Player settings
-const PLAYER_RADIUS = 3;
-const PLAYER_HEIGHT = 6;
+// Player
 camera.position.y = 10;
+const PLAYER_RADIUS = 3;
 
-// Movement
-let canMove = { x:true, z:true };
-const velocity = new THREE.Vector3();
-const direction = new THREE.Vector3();
-let prevTime = performance.now();
+// Input
+const move = {forward:false, backward:false, left:false, right:false};
 
 document.addEventListener('keydown', e => {
-  switch(e.code==='KeyW') && (direction.z = -1);
-  switch(e.code==='KeyS') && (direction.z =  1);
-  switch(e.code==='KeyA') && (direction.x = -1);
-  switch(e.code==='KeyD') && (direction.x =  1);
+  if(e.code==='KeyW') move.forward  = true;
+  if(e.code==='KeyS') move.backward = true;
+  if(e.code==='KeyA') move.left     = true;
+  if(e.code==='KeyD') move.right    = true;
 });
 document.addEventListener('keyup', e => {
-  if (e.code==='KeyW' || e.code==='KeyS') direction.z = 0;
-  if (e.code==='KeyA' || e.code==='KeyD') direction.x = 0;
+  if(e.code==='KeyW') move.forward  = false;
+  if(e.code==='KeyS') move.backward = false;
+  if(e.code==='KeyA') move.left     = false;
+  if(e.code==='KeyD') move.right    = false;
 });
 
 function animate() {
@@ -103,50 +99,38 @@ function animate() {
     return;
   }
 
-  const delta = (performance.now() - prevTime) / 1000;
-  prevTime = performance.now();
+  const speed = 150; // units per second
+  const delta = 0.016; // ~60fps
 
-  // Reset movement flags
-  canMove.x = true;
-  canMove.z = true;
+  // Reset movement
+  let dx = 0, dz = 0;
 
-  // Desired velocity this frame
-  const moveX = direction.x * 200 * delta;
-  const moveZ = direction.z * 200 * delta;
+  if (move.forward)  dz -= speed * delta;
+  if (move.backward) dz += speed * delta;
+  if (move.right)    dx += speed * delta;
+  if (move.left)     dx -= speed * delta;
 
   const pos = controls.getObject().position;
 
-  // Create player bounding box at current position
-  const playerBox = new THREE.Box3(
-    new THREE.Vector3(pos.x - PLAYER_RADIUS, pos.y, pos.z - PLAYER_RADIUS),
-    new THREE.Vector3(pos.x + PLAYER_RADIUS, pos.y + PLAYER_HEIGHT, pos.z + PLAYER_RADIUS)
-  );
-
   // Test X movement
-  const testBoxX = playerBox.clone().translate(new THREE.Vector3(moveX, 0, 0));
-  for (const box of walls) {
-    if (testBoxX.intersectsBox(box)) {
-      canMove.x = false;
-      break;
-    }
+  const testBoxX = new THREE.Box3(
+    new THREE.Vector3(pos.x + dx - PLAYER_RADIUS, pos.y, pos.z - PLAYER_RADIUS),
+    new THREE.Vector3(pos.x + dx + PLAYER_RADIUS, pos.y + 6, pos.z + PLAYER_RADIUS)
+  );
+  if (!testBoxX.intersectsBox(wallBox)) {
+    controls.moveRight(dx);
   }
 
-  // Test Z movement
-  const testBoxZ = playerBox.clone().translate(new THREE.Vector3(0, 0, moveZ));
-  for (const box of walls) {
-    if (testBoxZ.intersectsBox(box)) {
-      canMove.z = false;
-      break;
-    }
+  // Test Z movement (using updated X position)
+  const testBoxZ = new THREE.Box3(
+    new THREE.Vector3(pos.x - PLAYER_RADIUS, pos.y, pos.z + dz - PLAYER_RADIUS),
+    new THREE.Vector3(pos.x + PLAYER_RADIUS, pos.y + 6, pos.z + dz + PLAYER_RADIUS)
+  );
+  if (!testBoxZ.intersectsBox(wallBox)) {
+    controls.moveForward(dz);
   }
 
-  // Apply allowed movement
-  if (canMove.x) controls.moveRight(moveX);
-  if (canMove.z) controls.moveForward(moveZ);
-
-  // Keep player on ground + eye height
   pos.y = 10;
-
   renderer.render(scene, camera);
 }
 animate();

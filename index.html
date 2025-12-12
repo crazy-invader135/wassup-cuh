@@ -2,17 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Working NPC – JSZip Fixed</title>
+<title>Working NPC – FINAL FIXED VERSION</title>
 <style>
   body { margin:0; overflow:hidden; }
   #info {
-    position:absolute; top:10px; left:10px; color:#fff; background:rgba(0,0,0,0.6);
+    position:absolute; top:10px; left:10px; color:#fff; background:rgba(0,0,0,0.7);
     padding:10px; border-radius:8px; font-family:Arial; z-index:100;
   }
 </style>
 </head>
 <body>
-
 <div id="info">Loading NPC… (auto-start in 0.5 sec)</div>
 
 <script type="importmap">
@@ -29,7 +28,7 @@ import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
-import { JSZip } from 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';  // ← FIXED: named import { JSZip }
+import JSZip from 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.js'; // ← THIS LINE FIXED
 
 const scene    = new THREE.Scene();
 scene.background = new THREE.Color(0x88ccff);
@@ -42,8 +41,6 @@ renderer.shadowMap.enabled = true;
 document.body.appendChild(renderer.domElement);
 
 const controls = new PointerLockControls(camera, renderer.domElement);
-
-// Auto-start (no click needed)
 setTimeout(() => controls.lock(), 500);
 
 scene.add(controls.getObject());
@@ -54,10 +51,10 @@ scene.add(new THREE.AmbientLight(0xffffff, 0.7));
 const sun = new THREE.DirectionalLight(0xffffff, 1);
 sun.position.set(100,200,100);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048,2048);
+sun.shadow.mapSize.width = sun.shadow.mapSize.height = 2048;
 scene.add(sun);
 
-// Grass floor
+// Grass
 const grassTex = new THREE.TextureLoader().load('Textures/Grass.png');
 grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
 grassTex.repeat.set(500,500);
@@ -80,14 +77,13 @@ const velocity = new THREE.Vector3();
 const direction = new THREE.Vector3();
 let prevTime = performance.now();
 
-// LOAD NESTED ZIP NPC
+// LOAD NPC
 async function loadNPC() {
   try {
     const resp = await fetch('Models/NPC.zip');
-    if (!resp.ok) throw 'Cannot fetch NPC.zip – check the path';
+    if (!resp.ok) throw 'NPC.zip not found or blocked';
     const outerZip = await JSZip.loadAsync(await resp.arrayBuffer());
 
-    // find model.zip inside outer zip
     let innerZipData = null;
     outerZip.forEach((path, file) => {
       if (path.toLowerCase().includes('model.zip')) innerZipData = file.async('arraybuffer');
@@ -96,7 +92,6 @@ async function loadNPC() {
 
     const innerZip = await JSZip.loadAsync(await innerZipData);
 
-    // create blob URLs for all files
     const urls = {};
     const addFiles = async (zip, prefix='') => {
       for (const [name, file] of Object.entries(zip.files)) {
@@ -107,7 +102,6 @@ async function loadNPC() {
     await addFiles(outerZip);
     await addFiles(innerZip, 'inner/');
 
-    // find .obj and .mtl
     const objEntry = Object.entries(urls).find(([k]) => k.toLowerCase().endsWith('.obj'));
     const mtlEntry = Object.entries(urls).find(([k]) => k.toLowerCase().endsWith('.mtl'));
 
@@ -116,48 +110,40 @@ async function loadNPC() {
     const manager = new THREE.LoadingManager();
     manager.setURLModifier(url => {
       try { return urls[new URL(url).pathname.replace(/^\/+/,'')] || url; }
-      catch { return urls[url] || url; }
+      catch { return urls[url] || url;
     });
 
     const loader = new OBJLoader(manager);
     if (mtlEntry) {
-      const materials = await new MTLLoader(manager).loadAsync(mtlEntry[1]);
-      materials.preload();
-      loader.setMaterials(materials);
+      const mats = await new MTLLoader(manager).loadAsync(mtlEntry[1]);
+      mats.preload();
+      loader.setMaterials(mats);
     }
 
     const model = await loader.loadAsync(objEntry[1]);
 
-    model.scale.set(3,3,3);           // change if needed
-    model.position.set(0, 0, -40);    // 40 meters in front
-    model.rotation.y = Math.PI;       // face player
+    model.scale.set(3,3,3);
+    model.position.set(0,0,-40);
+    model.rotation.y = Math.PI;
 
-    model.traverse(node => {
-      if (node.isMesh) {
-        node.castShadow = true;
-        node.receiveShadow = true;
-      }
+    model.traverse(n => {
+      if (n.isMesh) n.castShadow = n.receiveShadow = true;
     });
 
     scene.add(model);
     document.getElementById('info').textContent = 'NPC loaded – walk forward!';
-    console.log('NPC spawned!');
-
-  } catch (err) {
-    document.getElementById('info').textContent = 'ERROR: ' + err;
-    console.error(err);
+  } catch (e) {
+    document.getElementById('info').textContent = 'ERROR: ' + e;
+    console.error(e);
   }
 }
-
 loadNPC();
 
-// Animation loop
+// Animate
 function animate() {
   requestAnimationFrame(animate);
-
   if (controls.isLocked) {
-    const delta = (performance.now() - prevTime) / 1000;
-
+    const delta = (performance.now() - prevTime)/1000;
     velocity.x -= velocity.x * 10 * delta;
     velocity.z -= velocity.z * 10 * delta;
 
@@ -170,11 +156,9 @@ function animate() {
 
     controls.moveRight(-velocity.x * delta);
     controls.moveForward(-velocity.z * delta);
-
     camera.position.y = 10;
     prevTime = performance.now();
   }
-
   renderer.render(scene, camera);
 }
 animate();

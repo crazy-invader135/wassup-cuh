@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Simple 3D First-Person Game - Three.js</title>
+    <title>Simple 3D First-Person Grass World - Three.js</title>
     <style>
         body { margin: 0; overflow: hidden; }
         #blocker {
@@ -39,7 +39,7 @@
     <div id="blocker">
         <div id="instructions">
             <h1>Click to play</h1>
-            <p>WASD to move<br>Mouse to look around<br>ESC to unlock pointer</p>
+            <p>WASD to move<br>Mouse to look around<br>ESC to release pointer</p>
         </div>
     </div>
     <div id="crosshair">+</div>
@@ -59,10 +59,9 @@
 
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x88ccff);
-        scene.fog = new THREE.Fog(0x88ccff, 0, 500);
+        scene.fog = new THREE.Fog(0x88ccff, 10, 500);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
@@ -73,118 +72,82 @@
         const blocker = document.getElementById('blocker');
         const instructions = document.getElementById('instructions');
 
-        instructions.addEventListener('click', function () {
-            controls.lock();
-        });
+        instructions.addEventListener('click', () => controls.lock());
 
-        controls.addEventListener('lock', function () {
-            blocker.style.display = 'none';
-        });
-
-        controls.addEventListener('unlock', function () {
-            blocker.style.display = 'flex';
-        });
+        controls.addEventListener('lock', () => blocker.style.display = 'none');
+        controls.addEventListener('unlock', () => blocker.style.display = 'flex');
 
         scene.add(controls.getObject());
-        controls.getObject().position.y = 10; // Eye height
+        controls.getObject().position.y = 10; // Player eye height
 
-        // Movement variables (from official Three.js PointerLockControls example)
-        let moveForward = false;
-        let moveBackward = false;
-        let moveLeft = false;
-        let moveRight = false;
-
+        // === Movement system (same as official example) ===
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
         const velocity = new THREE.Vector3();
         const direction = new THREE.Vector3();
-
         let prevTime = performance.now();
 
-        const onKeyDown = function ( event ) {
-            switch ( event.code ) {
-                case 'ArrowUp':
-                case 'KeyW':
-                    moveForward = true;
-                    break;
-                case 'ArrowLeft':
-                case 'KeyA':
-                    moveLeft = true;
-                    break;
-                case 'ArrowDown':
-                case 'KeyS':
-                    moveBackward = true;
-                    break;
-                case 'ArrowRight':
-                case 'KeyD':
-                    moveRight = true;
-                    break;
+        document.addEventListener('keydown', (event) => {
+            switch (event.code) {
+                case 'KeyW': moveForward = true; break;
+                case 'KeyA': moveLeft = true; break;
+                case 'KeyS': moveBackward = true; break;
+                case 'KeyD': moveRight = true; break;
             }
-        };
+        });
 
-        const onKeyUp = function ( event ) {
-            switch ( event.code ) {
-                case 'ArrowUp':
-                case 'KeyW':
-                    moveForward = false;
-                    break;
-                case 'ArrowLeft':
-                case 'KeyA':
-                    moveLeft = false;
-                    break;
-                case 'ArrowDown':
-                case 'KeyS':
-                    moveBackward = false;
-                    break;
-                case 'ArrowRight':
-                case 'KeyD':
-                    moveRight = false;
-                    break;
+        document.addEventListener('keyup', (event) => {
+            switch (event.code) {
+                case 'KeyW': moveForward = false; break;
+                case 'KeyA': moveLeft = false; break;
+                case 'KeyS': moveBackward = false; break;
+                case 'KeyD': moveRight = false; break;
             }
-        };
+        });
 
-        document.addEventListener('keydown', onKeyDown);
-        document.addEventListener('keyup', onKeyUp);
+        // === Lighting ===
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 
-        // Lighting
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(50, 100, 30);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        scene.add(dirLight);
 
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        directionalLight.position.set(50, 100, 10);
-        directionalLight.castShadow = true;
-        scene.add(directionalLight);
+        // === Grass Floor with Texture ===
+        const textureLoader = new THREE.TextureLoader();
+        const grassTexture = textureLoader.load('Textures/Grass.png');
 
-        // Ground
-        const groundGeometry = new THREE.PlaneGeometry(200, 200);
-        const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x228822 });
+        // Make the grass tile nicely
+        grassTexture.wrapS = THREE.RepeatWrapping;
+        grassTexture.wrapT = THREE.RepeatWrapping;
+        grassTexture.repeat.set(100, 100); // Adjust for desired tile size
+        grassTexture.encoding = THREE.sRGBEncoding;
+
+        const groundGeometry = new THREE.PlaneGeometry(1000, 1000);
+        const groundMaterial = new THREE.MeshStandardMaterial({
+            map: grassTexture,
+            roughness: 0.8,
+            metalness: 0.2
+        });
+
         const ground = new THREE.Mesh(groundGeometry, groundMaterial);
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;
         scene.add(ground);
 
-        // Some random boxes as obstacles/environment
-        const boxMaterial = new THREE.MeshStandardMaterial({ color: 0xff8888 });
-        for (let i = 0; i < 50; i++) {
-            const size = Math.random() * 10 + 5;
-            const boxGeometry = new THREE.BoxGeometry(size, size, size);
-            const box = new THREE.Mesh(boxGeometry, boxMaterial);
-            box.position.set(Math.random() * 180 - 90, size / 2, Math.random() * 180 - 90);
-            box.castShadow = true;
-            box.receiveShadow = true;
-            scene.add(box);
-        }
-
-        // Resize handler
+        // === Resize handler ===
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // Animation loop with movement
+        // === Animation loop ===
         function animate() {
             requestAnimationFrame(animate);
 
-            if (controls.isLocked === true) {
+            if (controls.isLocked) {
                 const time = performance.now();
                 const delta = (time - prevTime) / 1000;
 
@@ -201,7 +164,7 @@
                 controls.moveRight(-velocity.x * delta);
                 controls.moveForward(-velocity.z * delta);
 
-                // Keep player at constant height (simple no-gravity walker)
+                // Keep player floating at fixed height (simple walker)
                 controls.getObject().position.y = 10;
 
                 prevTime = time;

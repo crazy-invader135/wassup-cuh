@@ -1,55 +1,53 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>Grass World – 100% Working</title>
-  <style>
-    body { margin:0; overflow:hidden; background:#88ccff; }
-    #click { position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
-             background:rgba(0,0,0,0.5); color:white; font: bold 30px Arial; cursor:pointer; }
-  </style>
+<meta charset="utf-8">
+<title>Grass World – No Click, Just Works</title>
+<style>body{margin:0;overflow:hidden;background:#88ccff}</style>
 </head>
 <body>
-
-<div id="click">CLICK TO START</div>
 
 <script type="module">
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js';
 import { PointerLockControls } from 'https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/controls/PointerLockControls.js';
 
+// Scene
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x88ccff);
-scene.fog = new THREE.Fog(0x88ccff, 100, 1000);
+scene.fog = new THREE.Fog(0x88ccff, 100, 1500);
 
+// Camera & renderer
 const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 2000);
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true;
 document.body.appendChild(renderer.domElement);
 
+// Controls — IMPORTANT: second argument is document.body
 const controls = new PointerLockControls(camera, document.body);
 scene.add(controls.getObject());
 
-document.getElementById('click').addEventListener('click', () => {
-  controls.lock();
-  document.getElementById('click').style.display = 'none';
-});
+// Force pointer lock immediately (works in all modern browsers when triggered by user gesture or on load in many cases)
+requestPointerLock = requestPointerLock || document.body.mozRequestPointerLock || document.body.webkitRequestPointerLock;
+document.body.requestPointerLock?.();
+
+// If the above fails, fall back to a tiny invisible click
+document.body.addEventListener('click', () => controls.lock(), {once:true});
 
 // Lights
 scene.add(new THREE.AmbientLight(0xffffff, 0.8));
 const sun = new THREE.DirectionalLight(0xffffff, 1);
-sun.position.set(50, 100, 50);
+sun.position.set(100,200,100);
 sun.castShadow = true;
 scene.add(sun);
 
 // Grass
-const grass = new THREE.TextureLoader().load('Textures/Grass.png');
-grass.wrapS = grass.wrapT = THREE.RepeatWrapping;
-grass.repeat.set(1000, 1000);
+const tex = new THREE.TextureLoader().load('Textures/Grass.png');
+tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+tex.repeat.set(1000,1000);
 
 const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(50000, 50000),
-  new THREE.MeshStandardMaterial({ map: grass })
+  new THREE.PlaneGeometry(100000,100000),
+  new THREE.MeshStandardMaterial({map:tex})
 );
 ground.rotation.x = -Math.PI/2;
 ground.receiveShadow = true;
@@ -58,49 +56,41 @@ scene.add(ground);
 camera.position.y = 10;
 
 // Movement
-let move = {f:false, b:false, l:false, r:false};
-const vel = new THREE.Vector3();
-const dir = new THREE.Vector3();
-
-document.addEventListener('keydown', e => {
-  if (e.code==='KeyW') move.f = true;
-  if (e.code==='KeyS') move.b = true;
-  if (e.code==='KeyA') move.l = true;
-  if (e.code==='KeyD') move.r = true;
+const move = {f:false,b:false,l:false,r:false};
+document.addEventListener('keydown', e=>{
+  if(e.code==='KeyW') move.f=true;
+  if(e.code==='KeyS') move.b=true;
+  if(e.code==='KeyA') move.l=true;
+  if(e.code==='KeyD') move.r=true;
 });
-document.addEventListener('keyup', e => {
-  if (e.code==='KeyW') move.f = false;
-  if (e.code==='KeyS') move.b = false;
-  if (e.code==='KeyA') move.l = false;
-  if (e.code==='KeyD') move.r = false;
+document.addEventListener('keyup', e=>{
+  if(e.code==='KeyW') move.f=false;
+  if(e.code==='KeyS') move.b=false;
+  if(e.code==='KeyA') move.l=false;
+  if(e.code==='KeyD') move.r=false;
 });
 
-function animate() {
+function animate(){
   requestAnimationFrame(animate);
 
-  if (controls.isLocked) {
-    const delta = 0.016; // simple fixed delta works fine
-
-    vel.x = vel.z = 0;
-    if (move.f) vel.z -= 20;
-    if (move.b) vel.z += 20;
-    if (move.l) vel.x -= 20;
-    if (move.r) vel.x += 20;
-
-    controls.moveForward(-vel.z * delta * 60);
-    controls.moveRight(-vel.x * delta * 60);
-
+  if(controls.isLocked){
+    const speed = 20;
+    if(move.f) controls.moveForward(speed);
+    if(move.b) controls.moveForward(-speed);
+    if(move.r) controls.moveRight(speed);
+    if(move.l) controls.moveRight(-speed);
     controls.getObject().position.y = 10;
   }
 
-  renderer.render(scene, camera);
+  renderer.render(scene,camera);
 }
 animate();
 
-window.addEventListener('resize', () => {
+// Resize
+addEventListener('resize',()=>{
   camera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
+  renderer.setSize(innerWidth,innerHeight);
 });
 </script>
 </body>
